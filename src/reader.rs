@@ -11,7 +11,7 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::fs::File;
 
-use errors::{Error, ErrorKind, Result};
+use errors::{ProtoBufError, Result};
 use message::MessageRead;
 
 use byteorder::LittleEndian as LE;
@@ -90,9 +90,7 @@ impl BytesReader {
 
     #[inline(always)]
     fn read_u8(&mut self, bytes: &[u8]) -> Result<u8> {
-        let b = bytes.get(self.start).ok_or_else::<Error, _>(|| {
-            io::Error::new(io::ErrorKind::UnexpectedEof, "Cannot read next bytes").into()
-        })?;
+        let b = bytes.get(self.start).ok_or_else(|| ProtoBufError::UnexpectedEof )?;
         self.start += 1;
         Ok(*b)
     }
@@ -138,7 +136,7 @@ impl BytesReader {
         }
 
         // cannot read more than 10 bytes
-        Err(ErrorKind::Varint.into())
+        Err(ProtoBufError::Varint)?
     }
 
     /// Reads the next varint encoded u64
@@ -208,7 +206,7 @@ impl BytesReader {
         }
 
         // cannot read more than 10 bytes
-        Err(ErrorKind::Varint.into())
+        Err(ProtoBufError::Varint)?
     }
 
     /// Reads int32 (varint)
@@ -410,7 +408,7 @@ impl BytesReader {
                 match t >> 3 {
                     1 => k = read_key(r, bytes)?,
                     2 => v = read_val(r, bytes)?,
-                    t => return Err(ErrorKind::Map(t).into()),
+                    t => return Err(ProtoBufError::Map{tag: t})?,
                 }
             }
             Ok((k, v))
@@ -431,10 +429,10 @@ impl BytesReader {
                 self.start += len;
             }
             WIRE_TYPE_START_GROUP | WIRE_TYPE_END_GROUP => {
-                return Err(ErrorKind::Deprecated("group").into());
+                return Err(ProtoBufError::Deprecated{feat: "group".into()})?;
             }
             t => {
-                return Err(ErrorKind::UnknownWireType(t).into());
+                return Err(ProtoBufError::UnknownWireType{t})?;
             }
         }
         Ok(())
