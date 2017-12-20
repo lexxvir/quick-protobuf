@@ -6,9 +6,47 @@
 #![recursion_limit = "1024"]
 #![allow(dead_code)]
 
+#![cfg_attr(not(feature="std"),no_std)]
+#![cfg_attr(all(not(feature="std"),feature="collections"),feature(collections))]
+
+#[cfg(feature = "std")]
 extern crate byteorder;
-#[macro_use]
-extern crate failure;
+
+#[cfg(feature = "core_io_collections")]
+extern crate byteorder_core_io as byteorder;
+
+#[cfg(feature = "core_io_collections")]
+extern crate collections;
+
+#[cfg(feature = "core_io_collections")]
+extern crate core_io;
+
+#[cfg(feature = "core_io_collections")]
+pub(crate) mod std {
+    pub(crate) mod io {
+        pub(crate) use core_io::*;
+    }
+
+    pub(crate) mod slice {
+        pub(crate) use core::slice::*;
+    }
+
+    pub(crate) mod mem {
+        pub(crate) use core::mem::*;
+    }
+
+    pub(crate) mod fmt {
+        pub(crate) use core::fmt::*;
+    }
+
+    pub(crate) mod str {
+        pub(crate) use core::str::*;
+    }
+
+    pub(crate) mod result {
+        pub(crate) use core::result::*;
+    }
+}
 
 pub mod errors;
 pub mod message;
