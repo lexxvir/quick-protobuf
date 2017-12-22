@@ -9,6 +9,8 @@
 #![cfg_attr(not(feature="std"),no_std)]
 #![cfg_attr(all(not(feature="std"),feature="collections"),feature(collections))]
 
+extern crate failure;
+
 #[cfg(feature = "std")]
 extern crate byteorder;
 

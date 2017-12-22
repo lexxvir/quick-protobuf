@@ -2,47 +2,65 @@
 
 #![allow(missing_docs)]
 
-use std::str::Utf8Error;
+use std::fmt::{self, Display, Formatter};
 use std::io;
+use std::str::Utf8Error;
+
+use failure::Fail;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
     /// deprecated feature
-    // TODO #[fail(display = "feature '{}' has been deprecated", feat)]
-    Deprecated {
+    Deprecated{
         feat: &'static str,
     },
 
     /// unknown wire type
-    // TODO #[fail(display = "wire type must be less than 6, found {}", t)]
     UnknownWireType {
         t: u8
     },
 
     /// cannot decode varint
-    // TODO #[fail(display = "cannot decode varint")]
     Varint,
 
     /// error while parsing message
-    // TODO #[fail(display = "error while parsing message: {}", s)]
     ParseMessage {
         s: &'static str,
     },
 
     /// unexpected map tag
-    // TODO #[fail(display = "expecting a tag number 1 or 2, got {}", tag)]
     Map {
         tag: u8
     },
 
     /// unexpected end of buffer
-    // TODO #[fail(display = "Cannot read next bytes")]
     UnexpectedEof,
+
+    /// IO underlaying error
     IoError(io::Error),
+
+    /// UTF8 underlaying error
     Utf8Error(Utf8Error),
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            Error::Deprecated{ feat } => write!(f, "feature '{}' has been deprecated", feat),
+            Error::ParseMessage{ s } => write!(f, "error while parsing message: {}", s),
+            Error::UnknownWireType{ t } => write!(f, "wire type must be less than 6, found {}", t),
+            Error::Map{ tag } => write!(f, "expecting a tag number 1 or 2, got {}", tag),
+            Error::Varint => write!(f, "cannot decode varint"),
+            Error::UnexpectedEof => write!(f, "Cannot read next bytes"),
+            Error::Utf8Error(_) => write!(f, "Underlaying UTF8 error"),
+            Error::IoError(_) => write!(f, "Underlaying IO error"),
+        }
+    }
+}
+
+impl Fail for Error {}
 
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
