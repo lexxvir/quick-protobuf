@@ -855,16 +855,21 @@ impl Message {
     }
 
     fn write_impl_into_owned<W: Write>(&self, w: &mut W, desc: &FileDescriptor) -> Result<()> {
-        if self.has_lifetime(desc) {
-            writeln!(w, "impl<'a> IntoOwned for {}<'a> {{", self.name)?;
-        } else {
-            writeln!(w, "impl IntoOwned for {} {{", self.name)?;
+        if !self.has_lifetime(desc) {
+            writeln!(w, "impl IntoOwned<{}> for {} {{", self.name, self.name)?;
+            writeln!(w, "    fn into_owned(self) -> {} {{", self.name)?;
+            writeln!(w, "        self")?;
+            writeln!(w, "    }}")?;
+            writeln!(w, "}}")?;
+            return Ok(());
         }
 
-        writeln!(w, "    fn into_owned(&mut self) {{")?;
+        writeln!(w, "impl<'a> IntoOwned<{}<'static>> for {}<'a> {{", self.name, self.name)?;
+        writeln!(w, "    fn into_owned(self) -> {}<'static> {{", self.name)?;
+        writeln!(w, "        {name} {{", name = self.name)?;
 
         for oneof in &self.oneofs {
-            writeln!(w, "        self.{fname}.into_owned();", fname = oneof.name)?;
+            writeln!(w, "            {fname}: self.{fname}.into_owned(),", fname = oneof.name)?;
         }
 
         for field in &self.fields {
@@ -874,21 +879,21 @@ impl Message {
                         Frequency::Optional => {
                             writeln!(
                                 w,
-                                "        self.{fname}.as_mut().map(|x| x.into_owned());",
+                                "            {fname}: self.{fname}.map(|x| x.into_owned()),",
                                 fname = field.name
                             )?;
                         }
                         Frequency::Required => {
                             writeln!(
                                 w,
-                                "        self.{fname}.into_owned();",
+                                "            {fname}: self.{fname}.into_owned(),",
                                 fname = field.name
                             )?;
                         }
                         Frequency::Repeated => {
                             writeln!(
                                 w,
-                                "        for mut x in &mut self.{fname} {{ x.into_owned(); }}",
+                                "            {fname}: {{ let mut v = Vec::with_capacity(self.{fname}.len()); for x in self.{fname} {{ v.push(x.into_owned()); }} v }},",
                                 fname = field.name
                             )?;
                         }
@@ -899,29 +904,60 @@ impl Message {
                         Frequency::Optional => {
                             writeln!(
                                 w,
-                                "        self.{fname}.as_mut().map(|x| x.to_mut());",
+                                "            {fname}: self.{fname}.map(|x| Cow::Owned(x.into_owned())),",
                                 fname = field.name
                             )?;
                         }
                         Frequency::Required => {
                             writeln!(
                                 w,
-                                "        let _ = self.{fname}.to_mut();",
+                                "            {fname}: Cow::Owned(self.{fname}.into_owned()),",
                                 fname = field.name
                             )?;
                         }
                         Frequency::Repeated => {
                             writeln!(
                                 w,
-                                "        for mut x in &mut self.{fname} {{ let _ = x.to_mut(); }}",
+                                "            {fname}: {{ let mut v = Vec::with_capacity(self.{fname}.len()); for x in self.{fname} {{ v.push(Cow::Owned(x.into_owned())); }} v }},",
                                 fname = field.name
                             )?;
                         }
                     }
                 }
-                _ => (),
+                FieldType::Map(ref types) => {
+
+                    let f = |name, typ: &FieldType| {
+                        match typ {
+                            &FieldType::Message(_) => {
+                                format!("{}.into_owned()", name)
+                            }
+                            &FieldType::Bytes | &FieldType::String_ => {
+                                format!("Cow::Owned({}.into_owned())", name)
+                            }
+                            _ => {
+                                format!("{}", name)
+                            }
+                        }
+                    };
+
+                    writeln!(
+                        w,
+                        "            {fname}: {{ let mut m = BTreeMap::new(); for (k, v) in self.{fname} {{ m.insert({key}, {value}); }} m }},",
+                        fname = field.name,
+                        key = f("k", &types.0),
+                        value = f("v", &types.1),
+                    )?;
+                }
+                _ => {
+		    writeln!(
+			w,
+			"            {fname}: self.{fname},",
+			fname = field.name
+		    )?;
+                }
             }
         }
+        writeln!(w, "        }}")?;
         writeln!(w, "    }}")?;
         writeln!(w, "}}")?;
         Ok(())
@@ -1242,25 +1278,35 @@ impl OneOf {
     }
 
     fn write_impl_into_owned<W: Write>(&self, w: &mut W, desc: &FileDescriptor) -> Result<()> {
-        if self.has_lifetime(desc) {
-            writeln!(w, "impl<'a> IntoOwned for OneOf{}<'a> {{", self.name)?;
-        } else {
-            writeln!(w, "impl IntoOwned for OneOf{} {{", self.name)?;
+        if !self.has_lifetime(desc) {
+            writeln!(w, "impl IntoOwned<OneOf{}> for OneOf{} {{", self.name, self.name)?;
+            writeln!(w, "    fn into_owned(self) -> OneOf{} {{", self.name)?;
+            writeln!(w, "        self")?;
+            writeln!(w, "    }}")?;
+            writeln!(w, "}}")?;
+            return Ok(());
         }
 
-        writeln!(w, "    fn into_owned(&mut self) {{")?;
+        writeln!(w, "impl<'a> IntoOwned<OneOf{}<'static>> for OneOf{}<'a> {{", self.name, self.name)?;
+        writeln!(w, "    fn into_owned(self) -> OneOf{}<'static>{{", self.name)?;
         writeln!(w, "        match self {{")?;
         for field in &self.fields {
             match field.typ {
                 FieldType::Message(_) => {
-                    writeln!(w, "            &mut OneOf{}::{}(ref mut x) => x.into_owned(),", self.name, field.name)?;
+                    writeln!(w, "            OneOf{name}::{fname}(x) => OneOf{name}::{fname}(x.into_owned()),",
+                        name = self.name, fname = field.name)?;
                 }
                 FieldType::Bytes | FieldType::String_ => {
-                    writeln!(w, "            &mut OneOf{}::{}(ref mut x) => {{ let _ = x.to_mut(); }},", self.name, field.name)?;
+                    writeln!(w, "            OneOf{name}::{fname}(x) => OneOf{name}::{fname}(Cow::Owned(x.into_owned())),",
+                        name = self.name, fname = field.name)?;
                 }
-                _ => (),            }
+                _ => {
+                    writeln!(w, "            OneOf{name}::{fname}(x) => OneOf{name}::{fname}(x),",
+                        name = self.name, fname = field.name)?;
+                }
+            }
         }
-        writeln!(w, "            _ => (),")?;
+        writeln!(w, "            OneOf{name}::None => OneOf{name}::None,", name = self.name)?;
         writeln!(w, "        }}")?;
         writeln!(w, "    }}")?;
         writeln!(w, "}}")?;
