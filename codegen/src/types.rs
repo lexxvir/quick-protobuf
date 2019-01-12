@@ -726,6 +726,8 @@ impl Message {
         self.write_impl_message_read(w, desc)?;
         writeln!(w, "")?;
         self.write_impl_message_write(w, desc)?;
+        writeln!(w, "")?;
+        self.write_impl_into_owned(w, desc)?;
 
         if !(self.messages.is_empty() && self.enums.is_empty() && self.oneofs.is_empty()) {
             writeln!(w, "")?;
@@ -849,6 +851,79 @@ impl Message {
         // TODO: write impl default when special default?
         // alternatively set the default value directly when reading
 
+        Ok(())
+    }
+
+    fn write_impl_into_owned<W: Write>(&self, w: &mut W, desc: &FileDescriptor) -> Result<()> {
+        if self.has_lifetime(desc) {
+            writeln!(w, "impl<'a> IntoOwned for {}<'a> {{", self.name)?;
+        } else {
+            writeln!(w, "impl IntoOwned for {} {{", self.name)?;
+        }
+
+        writeln!(w, "    fn into_owned(&mut self) {{")?;
+
+        for oneof in &self.oneofs {
+            writeln!(w, "        self.{fname}.into_owned();", fname = oneof.name)?;
+        }
+
+        for field in &self.fields {
+            match field.typ {
+                FieldType::Message(_) => {
+                    match field.frequency {
+                        Frequency::Optional => {
+                            writeln!(
+                                w,
+                                "        self.{fname}.as_mut().map(|x| x.into_owned());",
+                                fname = field.name
+                            )?;
+                        }
+                        Frequency::Required => {
+                            writeln!(
+                                w,
+                                "        self.{fname}.into_owned();",
+                                fname = field.name
+                            )?;
+                        }
+                        Frequency::Repeated => {
+                            writeln!(
+                                w,
+                                "        for mut x in &mut self.{fname} {{ x.into_owned(); }}",
+                                fname = field.name
+                            )?;
+                        }
+                    }
+                }
+                FieldType::Bytes | FieldType::String_ => {
+                    match field.frequency {
+                        Frequency::Optional => {
+                            writeln!(
+                                w,
+                                "        self.{fname}.as_mut().map(|x| x.to_mut());",
+                                fname = field.name
+                            )?;
+                        }
+                        Frequency::Required => {
+                            writeln!(
+                                w,
+                                "        let _ = self.{fname}.to_mut();",
+                                fname = field.name
+                            )?;
+                        }
+                        Frequency::Repeated => {
+                            writeln!(
+                                w,
+                                "        for mut x in &mut self.{fname} {{ let _ = x.to_mut(); }}",
+                                fname = field.name
+                            )?;
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+        writeln!(w, "    }}")?;
+        writeln!(w, "}}")?;
         Ok(())
     }
 
@@ -1146,6 +1221,8 @@ impl OneOf {
         self.write_definition(w, desc)?;
         writeln!(w, "")?;
         self.write_impl_default(w, desc)?;
+        writeln!(w, "")?;
+        self.write_impl_into_owned(w, desc)?;
         Ok(())
     }
 
@@ -1161,6 +1238,33 @@ impl OneOf {
         }
         writeln!(w, "    None,")?;
         writeln!(w, "}}")?;
+        Ok(())
+    }
+
+    fn write_impl_into_owned<W: Write>(&self, w: &mut W, desc: &FileDescriptor) -> Result<()> {
+        if self.has_lifetime(desc) {
+            writeln!(w, "impl<'a> IntoOwned for OneOf{}<'a> {{", self.name)?;
+        } else {
+            writeln!(w, "impl IntoOwned for OneOf{} {{", self.name)?;
+        }
+
+        writeln!(w, "    fn into_owned(&mut self) {{")?;
+        writeln!(w, "        match self {{")?;
+        for field in &self.fields {
+            match field.typ {
+                FieldType::Message(_) => {
+                    writeln!(w, "            &mut OneOf{}::{}(ref mut x) => x.into_owned(),", self.name, field.name)?;
+                }
+                FieldType::Bytes | FieldType::String_ => {
+                    writeln!(w, "            &mut OneOf{}::{}(ref mut x) => {{ let _ = x.to_mut(); }},", self.name, field.name)?;
+                }
+                _ => (),            }
+        }
+        writeln!(w, "            _ => (),")?;
+        writeln!(w, "        }}")?;
+        writeln!(w, "    }}")?;
+        writeln!(w, "}}")?;
+
         Ok(())
     }
 
@@ -1549,7 +1653,7 @@ impl FileDescriptor {
 
     fn write_uses<W: Write>(&self, w: &mut W) -> Result<()> {
         if self.messages.iter().all(|m| m.is_unit()) {
-            writeln!(w, "use quick_protobuf::{{BytesReader, Result, MessageRead, MessageWrite}};")?;
+            writeln!(w, "use quick_protobuf::{{BytesReader, Result, MessageRead, MessageWrite, IntoOwned}};")?;
             return Ok(());
         }
         writeln!(w, "use std::io::Write;")?;
@@ -1570,7 +1674,7 @@ impl FileDescriptor {
         }) {
             writeln!(w, "use collections::btree_map::BTreeMap;")?;
         }
-        writeln!(w, "use quick_protobuf::{{MessageRead, MessageWrite, BytesReader, Writer, Result}};")?;
+        writeln!(w, "use quick_protobuf::{{MessageRead, MessageWrite, BytesReader, Writer, Result, IntoOwned}};")?;
         writeln!(w, "use quick_protobuf::sizeofs::*;")?;
         Ok(())
     }

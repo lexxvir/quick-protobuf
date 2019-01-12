@@ -55,8 +55,10 @@ pub mod message;
 pub mod reader;
 pub mod writer;
 pub mod sizeofs;
+pub mod into_owned;
 
 pub use errors::Result;
 pub use message::{MessageRead, MessageWrite};
 pub use reader::{BytesReader, Reader};
 pub use writer::Writer;
+pub use into_owned::IntoOwned;
