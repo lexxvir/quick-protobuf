@@ -1683,7 +1683,7 @@ fn split_package(package: &str) -> (&str, &str) {
     }
 }
 
-const MAGIC_HEADER: &'static str = "//! Automatically generated mod.rs";
+const MAGIC_HEADER: &'static str = "// Automatically generated mod.rs";
 
 /// Given a file path, create or update the mod.rs file within its folder
 fn update_mod_file(path: &Path) -> Result<()> {
