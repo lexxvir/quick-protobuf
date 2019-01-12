@@ -1553,6 +1553,7 @@ impl FileDescriptor {
             return Ok(());
         }
         writeln!(w, "use std::io::Write;")?;
+        writeln!(w, "use collections::Vec;")?;
         if self.messages.iter().any(|m| {
             m.fields
                 .iter()
