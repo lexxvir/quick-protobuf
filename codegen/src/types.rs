@@ -269,7 +269,7 @@ impl FieldType {
             FieldType::Map(ref t) => {
                 let &(ref key, ref value) = &**t;
                 format!(
-                    "HashMap<{}, {}>",
+                    "BTreeMap<{}, {}>",
                     key.rust_type(desc)?,
                     value.rust_type(desc)?
                 )
@@ -452,7 +452,7 @@ impl Field {
     }
 
     fn write_match_tag<W: Write>(&self, w: &mut W, desc: &FileDescriptor) -> Result<()> {
-        // special case for FieldType::Map: destructure tuple before inserting in HashMap
+        // special case for FieldType::Map: destructure tuple before inserting in BTreeMap
         if let FieldType::Map(ref m) = self.typ {
             let &(ref key, ref value) = &**m;
 
@@ -745,7 +745,7 @@ impl Message {
                     .chain(m.oneofs.iter().flat_map(|o| o.fields.iter()))
                     .any(|f| f.typ.is_map())
             }) {
-                writeln!(w, "use std::collections::HashMap;")?;
+                writeln!(w, "use collections::btree_map::BTreeMap;")?;
             }
             if !self.messages.is_empty() || !self.oneofs.is_empty() {
                 writeln!(w, "use super::*;")?;
@@ -1568,7 +1568,7 @@ impl FileDescriptor {
                 .chain(m.oneofs.iter().flat_map(|o| o.fields.iter()))
                 .any(|f| f.typ.is_map())
         }) {
-            writeln!(w, "use std::collections::HashMap;")?;
+            writeln!(w, "use collections::btree_map::BTreeMap;")?;
         }
         writeln!(w, "use quick_protobuf::{{MessageRead, MessageWrite, BytesReader, Writer, Result}};")?;
         writeln!(w, "use quick_protobuf::sizeofs::*;")?;
