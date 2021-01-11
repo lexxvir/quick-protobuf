@@ -35,13 +35,21 @@ pub trait MessageWrite: Sized {
 }
 
 /// A trait to handle deserialization from protocol buffers.
-pub trait MessageRead<'a>: Sized {
+pub trait MessageRead<'a>: Sized + Default {
+    /// Replaces a mutable instance of `Self` by reading from the given bytes
+    /// via the given reader.
+    ///
+    fn from_reader_mut(&mut self, r: &mut BytesReader, bytes: &'a [u8]) -> Result<()>;
+
     /// Constructs an instance of `Self` by reading from the given bytes
     /// via the given reader.
     ///
     /// It does NOT read message length first. If you want to read a variable
     /// length message, use `BytesReader::read_message` directly
-    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self>;
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+        let mut msg = Self::default();
+        msg.from_reader_mut(r, bytes).map(|_| msg)
+    }
 }
 
 /// A trait to provide basic information about a given message

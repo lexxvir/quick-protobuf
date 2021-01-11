@@ -521,7 +521,7 @@ impl Field {
             )?;
             writeln!(
                 w,
-                "                    msg.{}.insert(key, value);",
+                "                    self.{}.insert(key, value);",
                 self.name
             )?;
             writeln!(w, "                }}")?;
@@ -532,27 +532,27 @@ impl Field {
         let name = &self.name;
         write!(w, "                Ok({}) => ", self.tag())?;
         match self.frequency {
-            _ if self.boxed => writeln!(w, "msg.{} = Some(Box::new({})),", name, val)?,
+            _ if self.boxed => writeln!(w, "self.{} = Some(Box::new({})),", name, val)?,
             Frequency::Optional
                 if desc.syntax == Syntax::Proto2 && self.default.is_none()
                     || self.typ.message().is_some() =>
             {
-                writeln!(w, "msg.{} = Some({}),", name, val_cow)?
+                writeln!(w, "self.{} = Some({}),", name, val_cow)?
             }
             Frequency::Required | Frequency::Optional => {
-                writeln!(w, "msg.{} = {},", name, val_cow)?
+                writeln!(w, "self.{} = {},", name, val_cow)?
             }
             Frequency::Repeated if self.packed() && self.typ.is_fixed_size() => {
-                writeln!(w, "msg.{} = r.read_packed_fixed(bytes)?.into(),", name)?;
+                writeln!(w, "self.{} = r.read_packed_fixed(bytes)?.into(),", name)?;
             }
             Frequency::Repeated if self.packed() => {
                 writeln!(
                     w,
-                    "msg.{} = r.read_packed(bytes, |r, bytes| Ok({}))?,",
+                    "self.{} = r.read_packed(bytes, |r, bytes| Ok({}))?,",
                     name, val_cow
                 )?;
             }
-            Frequency::Repeated => writeln!(w, "msg.{}.push({}),", name, val_cow)?,
+            Frequency::Repeated => writeln!(w, "self.{}.push({}),", name, val_cow)?,
         }
         Ok(())
     }
@@ -1012,10 +1012,10 @@ impl Message {
             writeln!(w, "impl<'a> MessageRead<'a> for {} {{", self.name)?;
             writeln!(
                 w,
-                "    fn from_reader(r: &mut BytesReader, _: &[u8]) -> Result<Self> {{"
+                "    fn from_reader_mut(&mut self, r: &mut BytesReader, _: &[u8]) -> Result<()> {{"
             )?;
             writeln!(w, "        r.read_to_end();")?;
-            writeln!(w, "        Ok(Self::default())")?;
+            writeln!(w, "        Ok(())")?;
             writeln!(w, "    }}")?;
             writeln!(w, "}}")?;
             return Ok(());
@@ -1029,16 +1029,17 @@ impl Message {
             writeln!(w, "impl<'a> MessageRead<'a> for {}<'a> {{", self.name)?;
             writeln!(
                 w,
-                "    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {{"
+                "    fn from_reader_mut(&mut self, r: &mut BytesReader, bytes: &'a [u8]) -> Result<()> {{"
             )?;
         } else {
             writeln!(w, "impl<'a> MessageRead<'a> for {} {{", self.name)?;
             writeln!(
                 w,
-                "    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {{"
+                "    fn from_reader_mut(&mut self, r: &mut BytesReader, bytes: &'a [u8]) -> Result<()> {{"
             )?;
         }
 
+        /*
         let unregular_defaults = self
             .fields
             .iter()
@@ -1059,6 +1060,8 @@ impl Message {
             writeln!(w, "            ..Self::default()")?;
             writeln!(w, "        }};")?;
         }
+        */
+
         writeln!(w, "        while !r.is_eof() {{")?;
         writeln!(w, "            match r.next_tag(bytes) {{")?;
         for f in self.fields.iter().filter(|f| !f.deprecated) {
@@ -1074,7 +1077,7 @@ impl Message {
         writeln!(w, "                Err(e) => return Err(e),")?;
         writeln!(w, "            }}")?;
         writeln!(w, "        }}")?;
-        writeln!(w, "        Ok(msg)")?;
+        writeln!(w, "        Ok(())")?;
         writeln!(w, "    }}")?;
         writeln!(w, "}}")?;
 
@@ -1653,7 +1656,7 @@ impl OneOf {
             if f.boxed {
                 writeln!(
                     w,
-                    "                Ok({}) => msg.{} = {}OneOf{}::{}(Box::new({})),",
+                    "                Ok({}) => self.{} = {}OneOf{}::{}(Box::new({})),",
                     f.tag(),
                     self.name,
                     self.get_modules(desc),
@@ -1664,7 +1667,7 @@ impl OneOf {
             } else {
                 writeln!(
                     w,
-                    "                Ok({}) => msg.{} = {}OneOf{}::{}({}),",
+                    "                Ok({}) => self.{} = {}OneOf{}::{}({}),",
                     f.tag(),
                     self.name,
                     self.get_modules(desc),
